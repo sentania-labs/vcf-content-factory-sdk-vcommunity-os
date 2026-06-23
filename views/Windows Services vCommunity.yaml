@@ -1,0 +1,19 @@
+id: ae751947-1782-466f-b560-9a950be3c1f9
+name: Windows Services vCommunity
+description: Windows Services vCommunity
+subject:
+  adapter_kind: VMWARE
+  resource_kind: VirtualMachine
+columns:
+- attribute: Instance Name
+  display_name: Service
+- attribute: vCommunity|Guest OS|Services:DHCP Client|Service Name
+  display_name: Service Name
+- attribute: vCommunity|Guest OS|Services:DHCP Client|Service Status
+  display_name: Service Status
+  red_bound: Stopped
+- attribute: vCommunity|Guest OS|Services:DHCP Client|Service Start Type
+  display_name: Service Start Type
+time_window:
+  unit: DAYS
+  count: 7

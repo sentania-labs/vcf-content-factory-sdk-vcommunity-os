@@ -1,0 +1,30 @@
+name: "VCF Content Factory vCommunity OS"
+version: "1.0.0"
+build_number: 1
+adapter_kind: "vcfcf_vcommunity_os"
+entry_class: "com.vcfcf.adapters.vcommunity.VCommunityAdapter"
+tier: 2
+released: false
+bundled_content:
+  symptoms:
+    - symptoms/windows-service-down.yaml
+  alerts:
+    - alerts/windows-service-down.yaml
+  views:
+    - views/Windows Services vCommunity.yaml
+description: >
+  Windows guest-OS fork of the unified vCommunity Java SDK adapter (kind
+  vcfcf_vcommunity_os) — one of three paks the unified vcfcf_vcommunity adapter
+  was split into per designs/managementpacks/vcommunity-three-adapter-split.md.
+  Owns the in-guest collection surface only: Windows services, in-guest OS info
+  (CSV path via getWindowsOSInformation.ps1), and Windows event logs, read
+  through the vCenter GuestOperationsManager on this pak's OWN vim25 vCenter
+  session, and pushed onto existing VMWARE VirtualMachine resources under the
+  vCommunity|Guest OS| namespace via ARIA_OPS-style Suite API stitching. The
+  build-2 VMEntityVCID stitch-scoping fix is retained verbatim. The vSphere-side
+  surface (clusters, hosts, VM config/SCSI/snapshots, passive Tools-path OS
+  info) belongs to the vcommunity-vsphere pak. KNOWN-OPEN BLOCKER: in-guest
+  collection returns zero rows on hardened Server 2025 DCs (leading theory:
+  non-interactive PowerShell execution blocked) — this pak is built
+  structurally; guest-ops is shelved, not debugged. See README. Attribution:
+  Onur Yuzseven / vmbro/VCF-Operations-vCommunity (CC).

@@ -1,0 +1,162 @@
+# Canonical per-pak CI workflow for an independent SDK adapter repo.
+#
+# This file is the SOURCE OF TRUTH for the workflow that ships in
+# sentania-labs/vcf-content-factory-sdk-template and every pak instantiated
+# from it. It lives in the factory (under designs/) so it stays diffable and
+# can be updated centrally; copy it to `.github/workflows/build-pak-on-tag.yml`
+# in the pak repo.
+#
+# Contract: push a `v*` tag on the pak repo -> a headless runner pulls the
+# published sdk-buildkit tarball from the factory repo's Releases, builds the
+# .pak deterministically (no agent, no factory checkout), gates on pak-compare,
+# and attaches the .pak to this tag's GitHub Release.
+#
+# Required secret: SDK_RUNTIME_SSH_KEY
+#   A read-only ed25519 deploy key for sentania-labs/vcf-content-factory-sdk-runtime.
+#   The Broadcom SDK jar (vrops-adapters-sdk-2.2.jar) is committed at the repo root of
+#   that private repo and is never bundled in the factory or buildkit (C2 redistribution
+#   constraint). The jar is fetched via a shallow git clone using this deploy key.
+#   Setup: generate an ed25519 keypair, add the PUBLIC half as a read-only deploy key on
+#   sentania-labs/vcf-content-factory-sdk-runtime, and store the PRIVATE half as a repo
+#   (or org) Actions secret named SDK_RUNTIME_SSH_KEY before tagging a release.
+name: build-pak-on-tag
+
+on:
+  push:
+    tags:
+      - 'v*'          # pak release tags (factory's buildkit uses sdk-buildkit-v*, a different repo)
+
+permissions:
+  contents: write     # needed to create/upload the Release in THIS repo
+
+env:
+  # Which buildkit to pin. Use a full version (vX.Y.Z) for explicit opt-in,
+  # or the floating major tag (v1) to auto-follow compatible buildkit updates.
+  BUILDKIT_TAG: sdk-buildkit-v1
+  BUILDKIT_REPO: sentania-labs/vcf-content-factory
+
+jobs:
+  build:
+    # Self-hosted runner (the sentania-labs image). Adjust labels to match your
+    # runner pool. To use GitHub-hosted runners instead, switch to `ubuntu-latest`.
+    runs-on: [self-hosted, Linux, X64, generic]
+
+    steps:
+      - name: Checkout adapter source
+        uses: actions/checkout@v4
+
+      # Defect gate (factory RULE-012). Runs FIRST — before any expensive
+      # setup/build — so a v* tag fails fast and never produces a .pak while
+      # an open *blocking* defect names this pak in the factory registry.
+      #
+      # SECURITY (supply chain): the gate CODE is the VENDORED, in-repo
+      # ci/defect_gate.py — a committed, reviewable copy of the factory's
+      # gate script, run from THIS repo's checkout. It is NEVER fetched and
+      # executed from a mutable ref: doing so would run arbitrary
+      # factory-main code on a release runner that later holds
+      # SDK_RUNTIME_SSH_KEY (Codex PR-18 P1). Only the registry DATA
+      # (context/defects.md) is fetched live from factory main — it is inert
+      # markdown parsed locally, never executed — so a closed/opened defect
+      # takes effect immediately while no remote code crosses the boundary.
+      # Re-vendor ci/defect_gate.py from the factory when the gate's parser
+      # changes (it is propagated alongside this workflow).
+      #
+      # The pak name is derived from the repo name
+      # (vcf-content-factory-sdk-<name> -> <name>); override DEFECT_PAK_NAME
+      # below if your repo is named differently.
+      - name: Defect gate (RULE-012)
+        env:
+          DEFECT_PAK_NAME: ""   # leave empty to derive from the repo name
+        run: |
+          set -euo pipefail
+          NAME="${DEFECT_PAK_NAME:-}"
+          if [ -z "$NAME" ]; then
+            NAME="${GITHUB_REPOSITORY##*/}"          # owner/vcf-content-factory-sdk-foo -> vcf-content-factory-sdk-foo
+            NAME="${NAME#vcf-content-factory-sdk-}"   # -> foo
+          fi
+          if [ ! -f ci/defect_gate.py ]; then
+            echo "::error::ci/defect_gate.py (vendored gate script) is missing — re-vendor it from the factory. Refusing to fetch+execute remote code." >&2
+            exit 1
+          fi
+          # DATA only (inert markdown), fetched live from factory main:
+          curl -fsSL "https://raw.githubusercontent.com/sentania-labs/vcf-content-factory/main/context/defects.md" -o defects.md
+          echo "Gating pak '$NAME' against the live factory defect registry (vendored gate)..."
+          python3 ci/defect_gate.py --pak "$NAME" --registry defects.md
+          # exit 0 = clear; 2 = blocked (defect lines printed above); 1 = bad registry.
+          # Any non-zero propagates via set -e and fails the build before it starts.
+
+      # The sentania-labs runner image ships NO JDK. build-sdk needs javac+jar.
+      # If you bake a JDK into the runner image, delete this step.
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # The kit is pure stdlib + pyyaml. The image has python3 + pip on PATH.
+      - name: Ensure PyYAML
+        run: python3 -m pip install --quiet --disable-pip-version-check pyyaml
+
+      - name: Download sdk-buildkit from factory releases
+        env:
+          # The factory repo is public, so the job's github.token can read its
+          # release assets across repos — no PAT needed.
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p _kit_dl
+          gh release download "$BUILDKIT_TAG" \
+            --repo "$BUILDKIT_REPO" \
+            --pattern 'sdk-buildkit-*.tgz' \
+            --dir _kit_dl
+          mkdir -p _kit
+          tar xzf _kit_dl/sdk-buildkit-*.tgz -C _kit
+          echo "Kit version: $(cat _kit/sdk_buildkit/VERSION 2>/dev/null || echo unknown)"
+
+      - name: Fetch Broadcom SDK jar (private runtime repo via deploy key)
+        env:
+          SDK_RUNTIME_SSH_KEY: ${{ secrets.SDK_RUNTIME_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SDK_RUNTIME_SSH_KEY:-}" ]; then
+            echo "::error::SDK_RUNTIME_SSH_KEY secret is not set — generate an ed25519 keypair, add the public half as a read-only deploy key on sentania-labs/vcf-content-factory-sdk-runtime, and store the private half as SDK_RUNTIME_SSH_KEY Actions secret."
+            exit 1
+          fi
+          KEY_FILE="$RUNNER_TEMP/sdk_runtime_key"
+          KNOWN_HOSTS="$RUNNER_TEMP/sdk_runtime_known_hosts"
+          printf '%s\n' "$SDK_RUNTIME_SSH_KEY" > "$KEY_FILE"
+          chmod 600 "$KEY_FILE"
+          ssh-keyscan github.com > "$KNOWN_HOSTS" 2>/dev/null
+          GIT_SSH_COMMAND="ssh -i $KEY_FILE -o IdentitiesOnly=yes -o UserKnownHostsFile=$KNOWN_HOSTS" \
+            git clone --depth 1 git@github.com:sentania-labs/vcf-content-factory-sdk-runtime.git _sdk_runtime
+          rm -f "$KEY_FILE"
+          ls _sdk_runtime/vrops-adapters-sdk-*.jar
+
+      - name: Build the .pak (deterministic, headless)
+        run: |
+          set -euo pipefail
+          PYTHONPATH=_kit python3 -m sdk_buildkit build-sdk "$GITHUB_WORKSPACE" \
+            --sdk-jar _sdk_runtime/vrops-adapters-sdk-2.2.jar \
+            --output dist
+          ls -l dist/*.pak
+
+      - name: Gate on pak-compare (zero BLOCKING)
+        run: |
+          set -euo pipefail
+          PYTHONPATH=_kit python3 -m sdk_buildkit pak-compare dist/*.pak \
+            --reference-dir _kit/sdk_buildkit/reference_paks | tee compare.txt
+          if grep -qiE '\bBLOCKING\b' compare.txt && \
+             ! grep -qiE '0 +BLOCKING|BLOCKING: *0' compare.txt; then
+            echo "::error::pak-compare reported BLOCKING findings — failing the release."
+            exit 1
+          fi
+
+      - name: Publish .pak to the tag's Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "${GITHUB_REF_NAME}" dist/*.pak \
+            --title "${GITHUB_REF_NAME}" \
+            --notes "Automated SDK pak build for ${GITHUB_REF_NAME} (buildkit ${BUILDKIT_TAG})." \
+            || gh release upload "${GITHUB_REF_NAME}" dist/*.pak --clobber

@@ -1,0 +1,21 @@
+# Build outputs
+dist/
+*.pak
+
+# Generated docs (REFERENCE.md etc. emitted by auto-doc tooling)
+*.generated.md
+
+# Compiled / build artifacts
+*.class
+build/
+out/
+target/
+
+# Bundled jars are NEVER committed (C2 pak shape): the framework jar
+# (vcfcf-adapter-base.jar) is provided by the buildkit, and the Broadcom
+# SDK jar (vrops-adapters-sdk-*.jar) is fetched from the private runtime
+# repo at build time. If a lib/ ever appears, ignore its jars.
+lib/*.jar
+
+# Python caches (build tooling)
+__pycache__/

@@ -1,0 +1,15 @@
+name: "Windows Service Down"
+adapter_kind: VMWARE
+resource_kind: VirtualMachine
+type: 15
+sub_type: 19
+criticality: WARNING
+impact:
+  badge: HEALTH
+symptom_sets:
+  operator: ALL
+  sets:
+    - defined_on: SELF
+      operator: ALL
+      symptoms:
+        - name: "Windows Service Down"

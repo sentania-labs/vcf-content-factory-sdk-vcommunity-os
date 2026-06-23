@@ -1,0 +1,11 @@
+# Icon mapping for VCF Content Factory vCommunity OS.
+# Keys correspond to describe.xml ResourceKind key attributes. Values resolve
+# against this directory first, then the shared library at build time.
+#
+# The synthetic vCommunityWorld anchor uses the default icon — no branded SVG.
+
+adapter_kind_icon: default.svg
+
+resource_kinds:
+  vcfcf_vcommunity_os: default.svg   # adapter instance (type=7)
+  vCommunityWorld:     world.svg     # synthetic collection anchor

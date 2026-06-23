@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  describe.xml — VCF Content Factory vCommunity OS (Tier 2 Java SDK adapter).
+
+  The Windows guest-OS fork of the unified vCommunity adapter (native Java SDK
+  rewrite of vmbro/VCF-Operations-vCommunity, Onur Yuzseven, CC-licensed). One
+  of three paks the unified adapter was split into per
+  designs/managementpacks/vcommunity-three-adapter-split.md; this pak owns the
+  in-guest collection surface only (Windows services, in-guest OS info, event
+  logs) read through the vCenter GuestOperationsManager.
+
+  Pure ARIA_OPS-style stitching: the only declared object kinds are the type=7
+  adapter instance and the type=1 vCommunityWorld anchor. Every
+  vCommunity|Guest OS| property is pushed onto EXISTING foreign VMWARE
+  VirtualMachine resources via the Suite API at runtime — that foreign kind is
+  intentionally NOT declared here (it is owned by the VMWARE adapter), exactly
+  as the compliance reference adapter pushes onto VMWARE HostSystem without
+  declaring it.
+
+  Credential model (mirrors the prod original VCFOperationsvCommunity exactly):
+  ONE credential kind ("vCenter Credential") with FOUR fields — vCenter user +
+  password (required, used for the guest-ops vim25 session) and Windows guest
+  user + password (required for guest-ops in practice). An Ops adapter instance
+  binds exactly ONE credential, so a single combined kind is the only structure
+  that can deliver BOTH the vCenter session credential and the Windows guest
+  credential to the guest-ops path through one bound credential. The original
+  adapter.py defines the same single credential type ("vsphere_user") with
+  user/password/winUser/winPass. (Design §4 frames these as two trust
+  boundaries; the implemented binding is one combined kind, because guest-ops
+  runs THROUGH the vCenter session.)
+
+  Monitoring toggles mirror the original's TWO separate Advanced-Settings
+  enums: "Guest OS Service Monitoring Status" (serviceMonitoring) and
+  "Windows Event Log Monitoring Status" (winEventMonitoring), each
+  Enabled/Disabled. The Java derives the services / event-log gates from these
+  two booleans (VCommunityConfig.WindowsMonitoring).
+
+  This OS fork ships and references only the TWO Windows config files
+  (win_service_config_file, win_event_config_file); the four vSphere config
+  files belong to the vcommunity-vsphere pak and were removed here (design §4).
+-->
+<AdapterKind xmlns="http://schemas.vmware.com/vcops/schema"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             key="vcfcf_vcommunity_os"
+             nameKey="1"
+             version="1"
+             xsi:schemaLocation="http://schemas.vmware.com/vcops/schema describeSchema.xsd">
+
+  <CredentialKinds>
+    <!-- Single combined credential (mirrors original "vsphere_user"): vCenter
+         creds (for the guest-ops vim25 session) + Windows guest creds (for
+         GuestOperationsManager auth). -->
+    <CredentialKind key="vsphere_user" nameKey="2">
+      <CredentialField key="user" nameKey="3" type="string"
+                       required="true" dispOrder="1"/>
+      <CredentialField key="password" nameKey="4" type="string"
+                       required="true" password="true" dispOrder="2"/>
+      <CredentialField key="winUser" nameKey="40" type="string"
+                       required="false" dispOrder="3"/>
+      <CredentialField key="winPass" nameKey="41" type="string"
+                       required="false" password="true" dispOrder="4"/>
+    </CredentialKind>
+  </CredentialKinds>
+
+  <ResourceKinds>
+
+    <!-- Adapter Instance (type=7): connection + the two Windows config-file
+         names + the two monitoring enums. Binds the single vsphere_user
+         credential. -->
+    <ResourceKind key="vcfcf_vcommunity_os" nameKey="5" type="7"
+                  credentialKind="vsphere_user"
+                  monitoringInterval="5">
+
+      <!-- ===== Basic settings ===== -->
+      <ResourceIdentifier key="host" nameKey="6" type="string"
+                          required="true" dispOrder="1"/>
+
+      <!-- ===== Advanced settings ===== -->
+      <ResourceIdentifier key="port" nameKey="14" type="integer"
+                          required="false" dispOrder="2" default="443"/>
+      <ResourceIdentifier key="win_service_config_file" nameKey="12"
+                          type="string" required="false" dispOrder="3"
+                          default="windows_service_list"/>
+      <ResourceIdentifier key="win_event_config_file" nameKey="13"
+                          type="string" required="false" dispOrder="4"
+                          default="windows_event_list"/>
+      <ResourceIdentifier key="serviceMonitoring" nameKey="7" type="string"
+                          required="false" dispOrder="5" default="Disabled"
+                          enum="true">
+        <enum value="Enabled" displayOrder="1"/>
+        <enum value="Disabled" displayOrder="2"/>
+      </ResourceIdentifier>
+      <ResourceIdentifier key="winEventMonitoring" nameKey="16" type="string"
+                          required="false" dispOrder="6" default="Disabled"
+                          enum="true">
+        <enum value="Enabled" displayOrder="1"/>
+        <enum value="Disabled" displayOrder="2"/>
+      </ResourceIdentifier>
+      <ResourceIdentifier key="allowInsecure" nameKey="15" type="string"
+                          required="false" dispOrder="7" default="false"
+                          enum="true">
+        <enum value="false" displayOrder="1"/>
+        <enum value="true" displayOrder="2"/>
+      </ResourceIdentifier>
+    </ResourceKind>
+
+    <!-- vCommunityWorld: synthetic INTERNAL collection anchor (health + ops).
+         The OS pak only stitches VMs, so cluster/host counters are dropped. -->
+    <ResourceKind key="vCommunityWorld" nameKey="20" type="1">
+      <ResourceIdentifier key="world_id" nameKey="21" type="string"
+                          required="true" dispOrder="1"/>
+      <ResourceGroup key="Summary" nameKey="22" instanced="false">
+        <ResourceAttribute key="vms_stitched" nameKey="25"
+                           dataType="float" isProperty="false"
+                           defaultMonitored="true"/>
+        <ResourceAttribute key="guest_vms_attempted" nameKey="26"
+                           dataType="float" isProperty="false"
+                           defaultMonitored="true"/>
+        <ResourceAttribute key="guest_vms_degraded" nameKey="27"
+                           dataType="float" isProperty="false"
+                           defaultMonitored="true"/>
+        <ResourceAttribute key="events_as_properties" nameKey="28"
+                           dataType="float" isProperty="false"
+                           defaultMonitored="true"/>
+        <ResourceAttribute key="last_scan_timestamp" nameKey="29"
+                           dataType="string" isProperty="true"/>
+        <ResourceAttribute key="config_file_status" nameKey="30"
+                           dataType="string" isProperty="true"/>
+        <ResourceAttribute key="status" nameKey="31"
+                           dataType="string" isProperty="true"/>
+      </ResourceGroup>
+    </ResourceKind>
+
+  </ResourceKinds>
+
+  <LicenseConfig enabled="false"/>
+
+</AdapterKind>
