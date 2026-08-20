@@ -196,7 +196,9 @@ python3 -m vcfops_managementpacks build-sdk content/sdk-adapters/vcommunity-os -
 ## CI release contract
 
 The shippable `.pak` is built by CI, never on a laptop: commit + push to `main`,
-then push a `vX.Y.Z` tag. The `build-pak-on-tag` workflow pulls the published
+then push a `v<version>.<build_number>` tag matching `adapter.yaml`
+(for example `v1.0.0.29`, not `v1.0.0`). CI verifies the tag against
+`adapter.yaml` before building and fails fast on a mismatch. The `build-pak-on-tag` workflow pulls the published
 `sdk-buildkit`, fetches the private Broadcom SDK jar (`SDK_RUNTIME_TOKEN`
 secret), builds deterministically, gates on `pak-compare`, and attaches the
 `.pak` to the tag's GitHub Release. That Release asset **is** the release.
