@@ -87,6 +87,25 @@ jobs:
 
       # The sentania-labs runner image ships NO JDK. build-sdk needs javac+jar.
       # If you bake a JDK into the runner image, delete this step.
+      - name: Ensure PyYAML
+        run: python3 -m pip install --quiet --disable-pip-version-check pyyaml
+
+      # Fail fast when the pushed tag does not agree with adapter.yaml's
+      # version + build_number (factory issue #84). Without this, a v* tag
+      # pushed without bumping build_number builds green and publishes a pak
+      # stamped with the PREVIOUS release's version: version-indistinguishable
+      # from the prior release, which breaks the upgrade path (2026-08-18,
+      # synology v1.0.0.29 / unifi v1.1.0.12).
+      - name: Verify tag matches adapter.yaml version+build_number
+        run: |
+          set -euo pipefail
+          expected="v$(python3 -c "import yaml; a = yaml.safe_load(open('adapter.yaml')); print('%s.%s' % (a['version'], a['build_number']))")"
+          if [ "${expected}" != "${GITHUB_REF_NAME}" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match adapter.yaml (expected ${expected}). Bump build_number (and version if appropriate) in adapter.yaml, commit, then re-tag."
+            exit 1
+          fi
+          echo "Tag ${GITHUB_REF_NAME} matches adapter.yaml (${expected})."
+
       - name: Set up JDK 17
         uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
@@ -94,9 +113,6 @@ jobs:
           java-version: '17'
 
       # The kit is pure stdlib + pyyaml. The image has python3 + pip on PATH.
-      - name: Ensure PyYAML
-        run: python3 -m pip install --quiet --disable-pip-version-check pyyaml
-
       - name: Download sdk-buildkit from factory releases
         env:
           # The factory repo is public, so the job's github.token can read its
