@@ -60,6 +60,28 @@ from the live SOAP session each cycle is what keeps two adapters (this one and
 `vcommunity-vsphere`) resolving the *same* MOID to the *same* VCF Ops resource.
 See `lessons/stitch-moid-not-unique-across-vcenters.md`. Do not drop the scoping.
 
+## Installing: allow unsigned paks first
+
+This pak is unsigned, like every pak the VCF Content Factory builds (Broadcom
+offers no way for a third party to sign one). VCF Operations 9.0 and 9.1 refuse
+unsigned paks out of the box; behavior on 8.x is unverified. The setting below
+must be on for each install or upgrade of an unsigned pak:
+
+1. Log in to `https://<primary node>/admin` as `admin`.
+2. Administrator Settings, Security Settings: click **Activate Unsigned PAK
+   Installation** on 9.1 (**Enable Unsigned PAK Installation** on 9.0). The
+   change is refused while any cluster node is down.
+3. When uploading the pak (**Administration > Integrations > Repository >
+   Add**), tick **Ignore the PAK file signature checking**. The box only
+   appears once the setting is on.
+
+With the setting off, the install fails with
+`unsigned_pak_installation.not.allowed`. This is a cluster-wide security
+setting: it lets any unsigned pak be installed, not only this one, so decide
+it deliberately and consider turning it off again after installing. If you do,
+it has to go back on before you install the next build. Upgraded appliances
+keep whatever state the setting had before the upgrade.
+
 ## Relationship to the original (fresh fork, fresh kind)
 
 This is a **distinct adapter kind** (`vcfcf_vcommunity_os`), a fresh lineage —

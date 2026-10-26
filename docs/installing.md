@@ -14,6 +14,7 @@
 > versions, the target-system version/edition, network reachability (which
 > host/port), and the account the adapter authenticates with.
 
+- **Allow Unsigned PAK Installation** on for every install or upgrade of this unsigned pak on VCF Operations 9.0 and 9.1 (8.x is unverified); see [Installing: allow unsigned paks first](../README.md#installing-allow-unsigned-paks-first).
 - VCF Operations 8.x or 9.x (collect-path discovery is validated on
   9.0.2).
 - Reachability from the VCF Operations collector to the target system on
@@ -68,7 +69,7 @@ in sync with your real config fields (regenerate the docset after changing
 
 ## Step-by-Step Installation
 
-1. Install the `.pak` file via **Administration > Solutions > Add**.
+1. Install the `.pak` file via **Administration > Integrations > Repository > Add**.
 2. After installation, navigate to **Data Sources > Integrations > Accounts**.
 3. Click **Add Account** and select **VCF Content Factory Example Adapter**.
 4. Fill in the configuration fields above.
